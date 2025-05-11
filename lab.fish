@@ -78,6 +78,19 @@ function run_task
             run_task start
             run_task deploy
             run_task fly-hello
+        case "help"
+            echo "Usage: lab.fish <task> [args]"
+            echo ""
+            echo "Available tasks:"
+            echo "  deploy       - Runs pyinfra deploy.py"
+            echo "  debug        - Runs pyinfra debug-inventory"
+            echo "  task <name>  - Runs a specific pyinfra task by name"
+            echo "  ssh [cmd]    - SSH into the VM. Runs command if provided."
+            echo "  fly-hello    - Logs into Fly, sets up and triggers the hello-world pipeline"
+            echo "  reset        - Reverts the VM to the base snapshot"
+            echo "  start        - Starts the VM and waits for SSH"
+            echo "  full         - Runs reset, start, deploy, and fly-hello"
+            echo "  help         - Show this help message"
         case "*"
             echo "Unknown task: $task"
             return 1
@@ -85,7 +98,20 @@ function run_task
 end
 
 if test (count $argv) -lt 1
-    echo "Usage: lab.fish <task>"
+    run_task help
 else
+    #
+    set -l missing_deps
+    for cmd in virsh nc uv ssh fly
+        if ! command -v $cmd > /dev/null 2>&1
+            echo "Error: Required command '$cmd' not found in PATH." > /dev/stderr
+            set missing_deps yes
+        end
+    end
+
+    if test -n "$missing_deps"
+        echo "Please install the missing dependencies and try again." > /dev/stderr
+        exit 1
+    end
     run_task $argv
 end

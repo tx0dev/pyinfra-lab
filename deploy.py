@@ -13,7 +13,6 @@ alpine.enable_community_repository()
 
 alpine.install_tooling()
 
-
 apk.packages(
     name="Installing Postgres 16",
     packages=["postgresql16", "postgresql16-contrib", "postgresql16-openrc"],
@@ -37,7 +36,6 @@ postgres.database(
     owner="atc",
     psql_user="postgres",
 )
-
 
 concourse.install_concourse()
 concourse.setup_services()

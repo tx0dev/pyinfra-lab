@@ -10,8 +10,8 @@ from pyinfra.operations import apk, files, openrc, server
 
 concourse_version = "7.13.1"
 CONCOURSE_RELEASE = f"https://github.com/concourse/concourse/releases/download/v{concourse_version}/concourse-{concourse_version}-linux-amd64.tgz"
-USER = "atc"
-GROUP = "atc"
+DEFAULT_USER = "atc"
+DEFAULT_GROUP = "atc"
 ETC_DIR = "/etc/concourse"
 
 
@@ -95,7 +95,7 @@ def install_concourse():
 
 
 @deploy("Concourse Services")
-def setup_services(user: str = USER, group: str = GROUP):
+def setup_services(user: str = DEFAULT_USER, group: str = DEFAULT_GROUP):
     files.put(
         name="web Init",
         src="assets/concourse-web.initd",
@@ -138,7 +138,7 @@ def setup_services(user: str = USER, group: str = GROUP):
 
 
 @deploy("First run")
-def first_run(group=GROUP, user=USER):
+def first_run(group=DEFAULT_GROUP, user=DEFAULT_USER):
     for key in ["session_signing_key", "tsa_host_key", "authorized_worker_keys"]:
         key_file = f"{ETC_DIR}/{key}"
         if not host.get_fact(File, key_file):
