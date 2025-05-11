@@ -1,0 +1,45 @@
+#!/sbin/openrc-run
+
+: ${pidfile:="/run/supervise-$RC_SVCNAME.pid"}
+: ${logfile:="/var/log/${RC_SVCNAME}.log"}
+: ${wait:=200}  # milliseconds
+
+command="/usr/local/concourse/bin/concourse"
+command_args="worker"
+command_background=true
+
+name="Concourse Worker"
+
+depend() {
+	use net
+	need concourse-web
+}
+
+start_pre() {
+    : ${work_dir:="/opt/concourse-worker"}
+    export CONCOURSE_WORK_DIR=$work_dir
+    checkpath --directory -m 0755 -o root:root "$work_dir"
+}
+# Connection back to TSA
+: ${tsa_host:="127.0.0.1:2222"}
+: ${tsa_public_key:="/etc/concourse/tsa_host_key.pub"}
+: ${tsa_worker_private_key:="/etc/concourse/authorized_worker_keys"}
+export CONCOURSE_TSA_HOST=$tsa_host
+export CONCOURSE_TSA_PUBLIC_KEY=$tsa_public_key
+export CONCOURSE_TSA_WORKER_PRIVATE_KEY=$tsa_worker_private_key
+
+# Worker Tagging
+if [ "$tag" ]; then
+    export CONCOURSE_TAG=$tag
+fi
+if [ "$team" ]; then
+    export CONCOURSE_TEAM=$team
+fi
+
+# Runtime
+: ${runtime:="containerd"}
+export CONCOURSE_RUNTIME=$runtime
+
+
+checkpath -f -m 0755 "$logfile"
+start_stop_daemon_args="--stdout $logfile --stderr $logfile"

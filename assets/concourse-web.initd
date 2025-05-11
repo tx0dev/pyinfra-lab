@@ -1,0 +1,50 @@
+#!/sbin/openrc-run
+
+: ${pidfile:="/run/supervise-$RC_SVCNAME.pid"}
+: ${logfile:="/var/log/${RC_SVCNAME}.log"}
+: ${wait:=200}  # milliseconds
+
+command="/usr/local/concourse/bin/concourse"
+command_args="web"
+command_user="atc"
+command_group="atc"
+command_background=true
+
+name="Concourse Web"
+
+depend() {
+    need postgresql
+	after net
+	before concourse-worker
+}
+# Keys
+: ${session_signing_key:="/etc/concourse/session_signing_key"}
+: ${tsa_host_key:="/etc/concourse/tsa_host_key"}
+: ${tsa_authorized_keys:="/etc/concourse/authorized_worker_keys.pub"}
+export CONCOURSE_SESSION_SIGNING_KEY=$session_signing_key
+export CONCOURSE_TSA_HOST_KEY=$tsa_host_key
+export CONCOURSE_TSA_AUTHORIZED_KEYS=$tsa_authorized_keys
+
+# Database configuration
+: ${postgres_socket:="/var/run/postgresql"}
+CONCOURSE_POSTGRES_SOCKET=$postgres_socket
+
+
+# Web config
+if [ "$external_url" ]; then
+    export CONCOURSE_EXTERNAL_URL=$external_url
+fi
+
+if [ "$cluster_name" ]; then
+    export CONCOURSE_CLUSTER_NAME=$cluster_name
+fi
+
+# Initial setup
+if yesno ${test_local_user:-no} ; then
+	einfo "Launching with test account and team"
+    export CONCOURSE_ADD_LOCAL_USER=test:test
+    export CONCOURSE_MAIN_TEAM_LOCAL_USER=test
+fi
+
+checkpath -f -m 0755 -o $command_user "$logfile"
+start_stop_daemon_args="--stdout $logfile --stderr $logfile"

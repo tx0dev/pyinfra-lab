@@ -1,0 +1,16 @@
+# Server name
+cluster_name="Lab"
+
+# Keys
+#session_signing_key=/etc/concourse/session_signing_key
+#tsa_host_key=/etc/concourse/tsa_host_key
+#tsa_authorized_keys=/etc/concourse/authorized_worker_keys.pub
+
+# URL for web UI
+external_url="http://192.168.122.166:8080"
+
+# Database
+#postgres_socket="/var/run/postgresql"
+
+# Launch with Testing user, default no.
+#test_local_user="NO"
