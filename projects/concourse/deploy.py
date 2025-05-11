@@ -1,6 +1,6 @@
+from components import concourse
 from pyinfra.operations import apk, openrc, postgres
 
-from components import concourse
 from operations import alpine
 
 USER = "atc"
