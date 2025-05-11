@@ -73,6 +73,11 @@ function run_task
                 sleep 0.5
             end
             echo " up"
+        case "full"
+            run_task reset
+            run_task start
+            run_task deploy
+            run_task fly-hello
         case "*"
             echo "Unknown task: $task"
             return 1
