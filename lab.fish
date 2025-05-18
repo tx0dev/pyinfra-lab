@@ -1,12 +1,16 @@
 #!/usr/bin/env fish
 
+# Default settings - can be overridden by project params.fish
 set CONNECT "qemu:///system"
 set DOMAIN "debian-lab"
 set SNAPSHOT "base"
+set SSH_USER "root"
 set SSH_KEY "~/.ssh/id_cluster"
 set PROJECTS_DIR "./projects" # Define the projects directory
 set CLOUD_INIT_DIR "./cloud-init" # Define the cloud-init directory
-set DISK_BASE "/mnt/data/virt-images/debian-12-genericcloud-amd64.qcow2"
+set VM_IMAGE "/mnt/data/virt-images/debian-12-genericcloud-amd64.qcow2"
+set VM_MEMORY "6000"
+set VM_DISK "20"
 set SEED_ISO "/mnt/data/virt-images/seed.iso"
 
 # Colors for pretty output
@@ -88,133 +92,138 @@ function dom_ip
     end
 end
 
-# Main runner
-function project_task
+# Load project params if they exist
+function load_project_params
     set -l project $argv[1]
-    set -l task $argv[2]
-    set -l task_args $argv[3..]
+    set project_params "$PROJECTS_DIR/$project/params.fish"
+    if test -f $project_params
+        source $project_params
+    end
+end
 
-    # Handle "help" as a special case that doesn't require a project
-    if test "$project" = "help"
-        show_help ""
-        return 0
+# Execute a project-specific task if defined in params.fish
+function execute_project_command
+    set -l command $argv[1]
+    set -l project $argv[2]
+    set -l command_args $argv[3..-1]
+
+    if functions -q project_task_$command
+        log_step "Executing project-specific custom command for $project: $command"
+
+        # Make sure we're in the project directory
+        set -l orig_dir (pwd)
+        cd "$PROJECTS_DIR/$project"
+
+        # Execute the function with arguments
+        eval "project_task_$command $command_args"
+        set -l status_code $status
+
+        # Return to original directory
+        cd $orig_dir
+        return $status_code
     end
 
-    # Show project-specific help if no task was provided
-    if test -z "$task"
-        show_help $project
-        return 0
-    end
-
-    # For non-help tasks, validate the project exists
-    if test "$task" != "help"
-        set project_path "$PROJECTS_DIR/$project"
-        if not test -d "$project_path"
-            echo "Error: Project '$project' not found in '$PROJECTS_DIR'." > /dev/stderr
-            return 1
-        end
-    end
-
-    switch "$task"
-        case "deploy"
-            set -l orig_dir (pwd)
-            set -x PYTHONPATH (realpath ".")
-            cd $project_path
-            uv run pyinfra -y ../../inventory.py deploy.py
-            cd $orig_dir
-        case "debug"
-            uv run pyinfra -y inventory.py debug-inventory
-        case "task"
-            uv run pyinfra -y inventory.py $task_args
-        # Full run
-        case "full"
-            project_task $project reset
-            project_task $project start
-            project_task $project deploy
-            if test "$project" = "concourse"
-                project_task $project fly-hello
-            end
-        # Project specific
-        case "fly-hello"
-            set -l ip (dom_ip)
-            fly login -t lab -c "http://$ip:8080" -u test -p test
-            fly -t lab set-pipeline -p hello-world -c $project_path/hello.yaml -n
-            fly -t lab unpause-pipeline -p hello-world
-            fly -t lab trigger-job --job hello-world/hello-world-job --watch
-
-        case "help"
-            show_help $project
-        case "*"
-            echo "Unknown task: $task"
-            return 1
-    end
+    return 1
 end
 
 # Function to show help information
 function show_help
     set -l project $argv[1]
     echo "Usage:"
-    echo "  lab.fish <vm-task> [args]             # For VM management"
-    echo "  lab.fish <project> <project-task> [args]  # For project tasks"
+    echo "  lab.fish <command> [project] [args]         # For project tasks"
     echo ""
 
-    echo "VM Management Tasks (no project required):"
-    echo "  rebuild      - Destroys and rebuilds the VM via cloud-init"
-    echo "  reset        - Reverts the VM to the base snapshot"
-    echo "  start        - Starts the VM and waits for SSH"
-    echo "  ssh [cmd]    - SSH into the VM. Runs command if provided."
-    echo ""
+    if test -n "$project"
+        echo "Project `$project` commands:"
+    else
+        echo "VM Management commands (pass project to operate against its targets):"
+        echo "  rebuild      - Destroys and rebuilds the VM via cloud-init"
+        echo "  reset        - Reverts the VM to the base snapshot"
+        echo "  start        - Starts the VM and waits for SSH"
+        echo "  ssh [cmd]    - SSH into the VM. Runs command if provided."
+        echo "  stop         - Gracefully shuts down the VM"
+        echo ""
+        echo "Project commands (require project):"
+    end
+    echo "  deploy <project>      - Runs pyinfra deploy.py"
+    echo "  debug <project>       - Runs pyinfra debug-inventory"
+    echo "  task <project> <args> - Runs a specific pyinfra task by name"
+    echo "  full <project>        - Runs reset, start, deploy on a project"
 
     if not test -n "$project"
+        echo ""
         echo "Available projects in '$PROJECTS_DIR':"
         ls -d $PROJECTS_DIR/*/ 2>/dev/null | sed "s|$PROJECTS_DIR/||;s|/||"
-    end
-    if test -n "$project"
-        echo "Project specific tasks:"
-        switch "$project"
-            case "concourse"
-                echo "  fly-hello    - Sets up and triggers the hello-world pipeline"
+    else
+        load_project_params $project
+        for func in (functions -a | grep -E "^project_task")
+            set -l task_name (string replace "project_task_" "" $func)
+            echo "  $task_name     -  Custom command"
         end
-        echo ""
     end
-    echo "Project Tasks (require project name):"
-    echo "  deploy       - Runs pyinfra deploy.py"
-    echo "  debug        - Runs pyinfra debug-inventory"
-    echo "  task <name>  - Runs a specific pyinfra task by name"
-    echo "  full         - Runs reset, start, deploy, and fly-hello"
-    echo "  help         - Show this help message"
 end
 
+
+# Main script execution
 if test (count $argv) -lt 1
+    # Show help right away
     show_help ""
+    exit 0
+else if test "$argv[1]" = "help"
+    # Special case for help command
+    if test (count $argv) -ge 2
+        # Show help for specific project
+        set -l project $argv[2]
+        if test -d "$PROJECTS_DIR/$project"
+            # Clean up any existing custom tasks
+            for func in (functions -a | grep "^project_task_")
+                functions -e $func
+            end
+
+            # Show help with the project
+            show_help $project
+        else
+            log_error "Project '$project' not found in '$PROJECTS_DIR'."
+            return 1
+        end
+    else
+        # Show general help
+        show_help ""
+    end
 else
     # Check for required dependencies
     set -l missing_deps
-    for cmd in virsh nc uv ssh virt-install
+    for cmd in virsh nc uv ssh virt-install genisoimage
         if ! command -v $cmd > /dev/null 2>&1
-            echo "Error: Required command '$cmd' not found in PATH." > /dev/stderr
+            log_error "Error: Required command '$cmd' not found in PATH." > /dev/stderr
             set missing_deps yes
         end
     end
 
     if test -n "$missing_deps"
-        echo "Please install the missing dependencies and try again." > /dev/stderr
+        log_error "Please install the missing dependencies and try again." > /dev/stderr
         exit 1
     end
 
-    # Handle VM management commands directly without requiring a project
-    set -l vm_tasks rebuild reset start ssh
-    set -l arg1 $argv[1]
+    # Define all available commands
+    set -l vm_commands rebuild reset start ssh stop
+    set -l project_commands deploy debug task full
+    set -l command $argv[1]
 
-    if contains $arg1 $vm_tasks
+    # Handle VM management commands
+    if contains $command $vm_commands
         # For VM-specific tasks, call the corresponding function directly
-        set -l task $arg1
-        set -l task_args $argv[2..-1]
+        set -l command_args $argv[2..-1]
 
-        switch "$task"
+        # Check if second argument is a project, and if so, load its params
+        if test (count $argv) -ge 2; and test -d "$PROJECTS_DIR/$argv[2]"
+            set command_args $argv[3..-1]
+            load_project_params $argv[2]
+        end
+
+        switch "$command"
             case "rebuild"
                 log_step "Preparing to rebuild VM..."
-
                 # Check for required cloud-init files
                 set -l required_files "$CLOUD_INIT_DIR/user-data" "$CLOUD_INIT_DIR/meta-data" "$CLOUD_INIT_DIR/network-config"
                 set -l missing_files
@@ -321,7 +330,7 @@ else
 
                 # Check if +console was passed as an argument
                 set -l console_mode false
-                for arg in $task_args
+                for arg in $command_args
                     if test "$arg" = "+console"
                         set console_mode true
                         log_info "Console mode enabled"
@@ -333,10 +342,10 @@ else
                 set -l virt_opts
                 set -a virt_opts "--connect $CONNECT"
                 set -a virt_opts "--name $DOMAIN"
-                set -a virt_opts "--memory 6000"
+                set -a virt_opts "--memory $VM_MEMORY"
                 set -a virt_opts "--os-variant name=debian13"
                 set -a virt_opts "--nographics --import"
-                set -a virt_opts "--disk=size=20,backing_store=$DISK_BASE"
+                set -a virt_opts "--disk=size=$VM_DISK,backing_store=$VM_IMAGE"
                 set -a virt_opts "--disk=path=$SEED_ISO,readonly=yes"
                 set -a virt_opts "--console pty,target_type=serial"
 
@@ -412,21 +421,139 @@ else
                 end
                 echo " up"
                 log_success "VM is ready"
+            case "stop"
+                log_step "Stopping VM..."
+                log_cmd "virsh shutdown $DOMAIN"
+                virsh_cmd shutdown
             case "ssh"
                 log_step "Connecting to VM via SSH..."
-                set -l ip (dom_ip)
-                log_cmd "ssh -i $SSH_KEY root@$ip $task_args"
-                ssh -i $SSH_KEY -o StrictHostKeyChecking=no root@$ip $task_args
-        end
-    else
-        # Split arguments handling based on count
-        set -l arg_count (count $argv)
 
-        if test $arg_count -eq 1
-            show_help $argv[1]
+                # First check if VM exists and is running
+                if not domain_exists
+                    log_error "VM '$DOMAIN' does not exist."
+                    return 1
+                end
+
+                if not virsh_cmd domstate | grep -q running
+                    log_error "VM '$DOMAIN' is not running."
+                    return 1
+                end
+
+                # Get VM IP with error checking
+                set -l ip (dom_ip)
+                if test -z "$ip"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$ip"
+                    log_error "Could not get valid IP address for VM '$DOMAIN'."
+                    return 1
+                end
+
+                log_cmd "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args"
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
+        end
+    # Handle project-related commands
+    else if contains $command $project_commands
+        # These commands require a project name
+        if test (count $argv) -lt 2
+            log_error "Command '$command' requires a project name"
+            echo "Usage: lab.fish $command <project> [args]" >&2
+            return 1
+        end
+
+        # Get project and arguments
+        set -l project $argv[2]
+        set -l command_args $argv[3..-1]
+
+        # Validate project exists
+        set -l project_path "$PROJECTS_DIR/$project"
+        if not test -d "$project_path"
+            log_error "Project '$project' not found in '$PROJECTS_DIR'."
+            return 1
+        end
+
+        # Load project-specific parameters
+        load_project_params $project
+
+        # Check for VM IP if needed
+        set -g LAB_TARGET (dom_ip)
+        if test -z "$LAB_TARGET"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$LAB_TARGET"
+            log_error "Could not get valid IP address for VM '$DOMAIN'."
+            return 1
+        end
+
+        # Change directory
+        set -l orig_dir (pwd)
+        set -x PYTHONPATH (realpath ".")
+        cd $project_path
+        # Otherwise use the built-in commands
+        switch "$command"
+            case "deploy"
+                uv run pyinfra -y inventory.py deploy.py
+            case "debug"
+                uv run pyinfra -y inventory.py debug-inventory
+            case "task"
+                uv run pyinfra -y inventory.py $command_args
+            # Full run
+            case "full"
+                # First reset the VM
+                if domain_exists
+                    log_step "Reverting to base snapshot..."
+                    log_cmd "virsh snapshot-revert $SNAPSHOT"
+                    virsh_cmd "snapshot-revert" $SNAPSHOT
+                    log_success "VM reverted to base snapshot"
+                end
+
+                # Start the VM
+                log_step "Starting VM..."
+                log_cmd "virsh start $DOMAIN"
+                virsh_cmd "start"
+                echo -n "  Waiting for VM to start..."
+                while not virsh_cmd domstate | grep -q running
+                    echo -n "."
+                    sleep 1
+                end
+
+                # Deploy
+                uv run pyinfra -y inventory.py deploy.py
+
+                # Check if the project has any post-* custom tasks from params.fish
+                for func in (functions -a | grep -E "^project_task_post")
+                    set -l task_name (string replace "project_task_" "" $func)
+                    execute_project_task $project $task_name
+                end
+            case "*"
+                log_error "Unknown project command: $command"
+                return 1
+        end
+        cd $orig_dir
+    else
+        # Handle project-specific tasks or unknown command
+        # Get project and arguments
+        set -l project $argv[2]
+        set -l command_args $argv[3..-1]
+
+        # Validate project exists
+        set -l project_path "$PROJECTS_DIR/$project"
+        if not test -d "$project_path"
+            log_error "Project '$project' not found in '$PROJECTS_DIR'."
+            return 1
+        end
+
+        # First check if this is a project-specific custom task defined in params.fish
+        # Clear any existing custom task functions to avoid interference
+        for func in (functions -a | grep "^project_task_")
+            functions -e $func
+        end
+
+        # Load project params and look for custom tasks
+        load_project_params $project
+
+        if execute_project_command $command $project $command_args
+            log_success "Custom command '$command' completed successfully"
+            return 0
         else
-            # Otherwise pass all arguments to project_task as normal
-            project_task $argv
+            # Not a recognized command
+            log_error "Unknown command: $command"
+            show_help ""
+            return 1
         end
     end
 end

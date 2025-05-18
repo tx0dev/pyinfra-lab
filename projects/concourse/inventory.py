@@ -1,6 +1,8 @@
+import os
+
 inventory = [
     (
-        "192.168.122.166",
+        os.environ.get("LAB_TARGET", ""),
         {
             "install_postgres": True,
             "concourse_web": True,
