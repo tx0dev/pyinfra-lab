@@ -7,7 +7,9 @@ from pyinfra.operations import files, apk
 
 # Check that the @edge repository is enabled
 @operation()
-def enable_edge_repository(mirror="http://mirror.csclub.uwaterloo.ca", backup=False):
+def enable_edge_repository(
+    mirror: str = "http://mirror.csclub.uwaterloo.ca", backup: bool = False
+):
     """
     Add the @edge APK repositories
 
@@ -26,7 +28,9 @@ def enable_edge_repository(mirror="http://mirror.csclub.uwaterloo.ca", backup=Fa
 
 
 @operation()
-def enable_testing_repository(mirror="http://mirror.csclub.uwaterloo.ca", backup=False):
+def enable_testing_repository(
+    mirror: str = "http://mirror.csclub.uwaterloo.ca", backup: bool = False
+):
     """
     Add the @testing APK repositories
 
@@ -65,7 +69,9 @@ def disable_community_repository():
 
 @operation()
 def set_repository(
-    mirror="http://mirror.csclub.uwaterloo.ca", version="3.21", backup=False
+    mirror: str = "http://mirror.csclub.uwaterloo.ca",
+    version: str = "3.21",
+    backup: bool = False,
 ):
     """
     Set the APK repositories to the specified mirror and version
@@ -99,7 +105,7 @@ def set_repository(
 
 
 @operation()
-def set_timezone(zone="America/Toronto"):
+def set_timezone(zone: str = "America/Toronto"):
     """
     Set the timezone
 
@@ -112,13 +118,10 @@ def set_timezone(zone="America/Toronto"):
         symbolic=True,
     )
 
+
 @deploy("Install tooling")
 def install_tooling():
-    apk.packages(
+    _ = apk.packages(
         name="Install tools",
-        packages=[
-            "neovim",
-            "curl",
-            "jq"
-        ],
+        packages=["neovim", "curl", "jq"],
     )
