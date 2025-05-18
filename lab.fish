@@ -1,5 +1,8 @@
 #!/usr/bin/env fish
 
+# Block some VM from the rebuild command
+set NO_REBUILD "alpine-lab"
+
 # Default settings - can be overridden by project params.fish
 set CONNECT "qemu:///system"
 set DOMAIN "debian-lab"
@@ -12,17 +15,6 @@ set VM_IMAGE "/mnt/data/virt-images/debian-12-genericcloud-amd64.qcow2"
 set VM_MEMORY "6000"
 set VM_DISK "20"
 set SEED_ISO "/mnt/data/virt-images/seed.iso"
-
-# Colors for pretty output
-# Fish has built-in color support via set_color, so we don't need these
-# but keeping them as comments for reference
-# set -g CLR_RESET (printf "\033[0m")
-# set -g CLR_BOLD (printf "\033[1m")
-# set -g CLR_DIM (printf "\033[2m")
-# set -g CLR_BLUE (printf "\033[34m")
-# set -g CLR_GREEN (printf "\033[32m")
-# set -g CLR_YELLOW (printf "\033[33m")
-# set -g CLR_RED (printf "\033[31m")
 
 # Pretty output functions
 function log_cmd
@@ -151,7 +143,6 @@ function show_help
     echo "  full <project>        - Runs reset, start, deploy on a project"
 
     if not test -n "$project"
-        echo ""
         echo "Available projects in '$PROJECTS_DIR':"
         ls -d $PROJECTS_DIR/*/ 2>/dev/null | sed "s|$PROJECTS_DIR/||;s|/||"
     else
@@ -224,6 +215,11 @@ else
         switch "$command"
             case "rebuild"
                 log_step "Preparing to rebuild VM..."
+                # Check if the VM is in the NO_REBUILD list
+                if contains $DOMAIN $NO_REBUILD
+                    log_error "VM '$DOMAIN' is not allowed to be rebuilt."
+                    return 1
+                end
                 # Check for required cloud-init files
                 set -l required_files "$CLOUD_INIT_DIR/user-data" "$CLOUD_INIT_DIR/meta-data" "$CLOUD_INIT_DIR/network-config"
                 set -l missing_files
