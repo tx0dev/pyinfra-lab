@@ -17,3 +17,16 @@ ssh_keys:
     +ZQU6Z+5byH+voDWXM9pAAAAB0xBQi1TU0gBAgMEBQY=
     -----END OPENSSH PRIVATE KEY-----
   ed25519_public: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFuulMqd+TwectslspDe8zAQ+ZQU6Z+5byH+voDWXM9p LAB-SSH
+apt:
+  primary:
+    - arches: [default]
+      uri: http://ftp.ca.debian.org/debian/
+  security:
+    - arches: [default]
+      uri: http://ftp.ca.debian.org/debian-security/
+  conf: | # APT config
+    APT::Install-Recommends "0";
+    APT::Install-Suggests "0";
+package_update: true
+packages:
+ - screenfetch

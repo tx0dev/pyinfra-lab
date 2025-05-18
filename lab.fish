@@ -22,8 +22,7 @@ set SEED_ISO "/mnt/data/virt-images/seed.iso"
 
 # Pretty output functions
 function log_cmd
-    set_color normal; echo ""
-    set_color -d; echo -e "▶ "(string replace -r '\\s+' ' ' (string join " " $argv));
+    set_color -d; echo "▶ $argv";
     set_color normal
 end
 
@@ -417,7 +416,7 @@ else
                 log_step "Connecting to VM via SSH..."
                 set -l ip (dom_ip)
                 log_cmd "ssh -i $SSH_KEY root@$ip $task_args"
-                ssh -i $SSH_KEY root@$ip $task_args
+                ssh -i $SSH_KEY -o StrictHostKeyChecking=no root@$ip $task_args
         end
     else
         # Split arguments handling based on count
