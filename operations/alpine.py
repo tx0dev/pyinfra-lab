@@ -65,7 +65,9 @@ def disable_community_repository():
 
 @operation()
 def set_repository(
-    mirror="http://mirror.csclub.uwaterloo.ca", version="3.21", backup=False
+    mirror: str = "http://mirror.csclub.uwaterloo.ca",
+    version: str = "3.21",
+    backup: bool = False,
 ):
     """
     Set the APK repositories to the specified mirror and version
@@ -112,13 +114,10 @@ def set_timezone(zone="America/Toronto"):
         symbolic=True,
     )
 
+
 @deploy("Install tooling")
 def install_tooling():
     apk.packages(
         name="Install tools",
-        packages=[
-            "neovim",
-            "curl",
-            "jq"
-        ],
+        packages=["neovim", "curl", "jq"],
     )
