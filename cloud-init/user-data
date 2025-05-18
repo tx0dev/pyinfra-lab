@@ -1,0 +1,19 @@
+#cloud-config
+password: passw0rd
+chpasswd: { expire: False }
+create_hostname_file: true
+ssh_pwauth: True
+disable_root: False
+ssh_deletekeys: True
+ssh_authorized_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIBaUpGxhQqtv5JVmTpRXWi9jrVmAkKb+WbTQdoAwU7Q cluster@tx0.foo,
+ssh_keys:
+  ed25519_private: |
+    -----BEGIN OPENSSH PRIVATE KEY-----
+    b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+    QyNTUxOQAAACBbrpTKnfk8HnLbJbKQ3vMwEPmUFOmfuW8h/r6A1lzPaQAAAJC9pCgJvaQo
+    CQAAAAtzc2gtZWQyNTUxOQAAACBbrpTKnfk8HnLbJbKQ3vMwEPmUFOmfuW8h/r6A1lzPaQ
+    AAAEAwhNav4XL0waBUiVcK1np10f3y2/1GnI4gkniRV0DgxluulMqd+TwectslspDe8zAQ
+    +ZQU6Z+5byH+voDWXM9pAAAAB0xBQi1TU0gBAgMEBQY=
+    -----END OPENSSH PRIVATE KEY-----
+  ed25519_public: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFuulMqd+TwectslspDe8zAQ+ZQU6Z+5byH+voDWXM9p LAB-SSH
