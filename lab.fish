@@ -108,11 +108,10 @@ function execute_project_command
 
         # Execute the function with arguments
         eval "project_task_$command $command_args"
-        set -l status_code $status
 
         # Return to original directory
         cd $orig_dir
-        return $status_code
+        return 0
     end
 
     return 1
@@ -220,6 +219,7 @@ else
                     log_error "VM '$DOMAIN' is not allowed to be rebuilt."
                     return 1
                 end
+
                 # Check for required cloud-init files
                 set -l required_files "$CLOUD_INIT_DIR/user-data" "$CLOUD_INIT_DIR/meta-data" "$CLOUD_INIT_DIR/network-config"
                 set -l missing_files
@@ -236,6 +236,22 @@ else
                     end
                     log_error "Please create these files in '$CLOUD_INIT_DIR' before rebuilding." > /dev/stderr
                     return 1
+                end
+
+                # Check for optional parameters in command argument
+                set -l console_mode false
+                set -l wait false
+                for arg in $command_args
+                    if test "$arg" = "+console"
+                        set console_mode true
+                        log_info "Console mode enabled"
+                        break
+                    end
+                    if test "$arg" = "+wait"
+                        set wait true
+                        log_info "Wait mode enabled"
+                        break
+                    end
                 end
 
                 log_step "Checking for existing VM..."
@@ -324,16 +340,6 @@ else
                 log_cmd "genisoimage -output $SEED_ISO -volid cidata ..."
                 genisoimage -output $SEED_ISO -volid cidata -joliet -rock $CLOUD_INIT_DIR/user-data $CLOUD_INIT_DIR/meta-data
 
-                # Check if +console was passed as an argument
-                set -l console_mode false
-                for arg in $command_args
-                    if test "$arg" = "+console"
-                        set console_mode true
-                        log_info "Console mode enabled"
-                        break
-                    end
-                end
-
                 # Format command in a cleaner way for display
                 set -l virt_opts
                 set -a virt_opts "--connect $CONNECT"
@@ -387,10 +393,14 @@ else
                     echo -n .
                     sleep 0.5
                 end
-
-                log_step "Taking base snapshot..."
-                log_cmd "virsh snapshot-create-as $DOMAIN --name $SNAPSHOT"
-                virsh_cmd snapshot-create-as --name $SNAPSHOT --description "Base snapshot after fresh install"
+                # Not taking a snapshot if we do rebuild. kinda pointless.
+                #log_step "Taking base snapshot..."
+                #log_cmd "virsh snapshot-create-as $DOMAIN --name $SNAPSHOT"
+                #virsh_cmd snapshot-create-as --name $SNAPSHOT --description "Base snapshot after fresh install"
+                if test "$wait" = "true"
+                    log_step "Waiting 10 seconds for stabilisation"
+                    sleep 10
+                end
                 log_success "VM has been rebuilt successfully!"
             case "reset"
                 log_step "Reverting to base snapshot..."
@@ -406,7 +416,6 @@ else
                     echo -n "."
                     sleep 1
                 end
-                echo " running"
 
                 set -l ip (dom_ip)
                 log_info "IP: $ip"
@@ -415,7 +424,6 @@ else
                     echo -n "."
                     sleep 0.5
                 end
-                echo " up"
                 log_success "VM is ready"
             case "stop"
                 log_step "Stopping VM..."
@@ -469,7 +477,7 @@ else
         load_project_params $project
 
         # Check for VM IP if needed
-        set -g LAB_TARGET (dom_ip)
+        set -xg LAB_TARGET (dom_ip)
         if test -z "$LAB_TARGET"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$LAB_TARGET"
             log_error "Could not get valid IP address for VM '$DOMAIN'."
             return 1
@@ -507,13 +515,30 @@ else
                     sleep 1
                 end
 
+                set -l ip (dom_ip)
+                log_info "IP: $ip"
+                echo -n "  Waiting for SSH..."
+                while not check_host_up $ip 22
+                    echo -n "."
+                    sleep 0.5
+                end
+                log_success "VM is ready"
+
                 # Deploy
                 uv run pyinfra -y inventory.py deploy.py
 
+                if test $status -eq 0
+                    log_success "PyInfra deployment completed successfully"
+                else
+                    log_error "PyInfra deployment failed."
+                    return 1
+                end
+
+                cd $orig_dir
                 # Check if the project has any post-* custom tasks from params.fish
                 for func in (functions -a | grep -E "^project_task_post")
                     set -l task_name (string replace "project_task_" "" $func)
-                    execute_project_task $project $task_name
+                    execute_project_command $task_name $project
                 end
             case "*"
                 log_error "Unknown project command: $command"
@@ -543,7 +568,7 @@ else
         load_project_params $project
 
         if execute_project_command $command $project $command_args
-            log_success "Custom command '$command' completed successfully"
+            log_success "Ran command '$command'."
             return 0
         else
             # Not a recognized command
