@@ -1,8 +1,13 @@
 import os
 
+target = os.environ.get("LAB_TARGET", "")
+if not target:
+    raise ValueError("LAB_TARGET environment variable is not set")
+print(f"TARGET: {target}")
+
 inventory = [
     (
-        os.environ.get("LAB_TARGET", ""),
+        target,
         {
             "install_kind": True,
         },
