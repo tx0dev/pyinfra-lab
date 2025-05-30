@@ -34,7 +34,6 @@ def enable_sid():
 Pin: release a=unstable
 Pin-Priority: 10k"""),
     )
-    yield from apt.update._inner()
 
 
 @deploy("Tooling")

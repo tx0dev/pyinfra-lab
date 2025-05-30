@@ -1,13 +1,35 @@
+from io import StringIO
 from pyinfra.operations import apt, systemd, files, server
 from pyinfra.context import host
 from pyinfra.facts.files import File
+from pyinfra.facts.hardware import Ipv4Addrs
 from operations import debian
 
 KIND_RELEASE = "https://kind.sigs.k8s.io/dl/v0.28.0/kind-linux-amd64"
 NERD_RELEASE = "https://github.com/containerd/nerdctl/releases/download/v2.1.1/nerdctl-2.1.1-linux-amd64.tar.gz"
 
+ips = host.get_fact(Ipv4Addrs)["enp1s0"]
+conf = StringIO(
+    f"""kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "{ips[0]}"
+  apiServerPort: 6443
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 6443
+    hostPort: 6443
+    protocol: TCP
+- role: worker
+"""
+)
+
+
 _ = debian.set_timezone()
-_ = debian.enable_sid()
+enable_sid = debian.enable_sid()
+if enable_sid.changed:
+    _ = apt.update()
 _ = debian.install_tooling()
 
 _ = apt.packages(
@@ -20,7 +42,11 @@ _ = apt.packages(
 )
 _ = apt.packages(
     name="Install containerd and runc from sid",
-    packages=["containerd", "runc"],
+    packages=[
+        "containerd",
+        "runc",
+        "kubernetes-client",
+    ],
     extra_install_args="-t sid",
 )
 
@@ -50,3 +76,10 @@ if not host.get_fact(File, "/usr/local/bin/nerdctl"):
             "chmod +x /usr/local/bin/nerdctl",
         ],
     )
+
+
+_ = files.put(
+    name="Put KIND config",
+    src=conf,
+    dest="/root/kind-cfg.yaml",
+)
