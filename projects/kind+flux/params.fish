@@ -25,7 +25,48 @@ function project_task_post-create
         log_error "Could not get valid IP address for VM '$DOMAIN'."
         return 1
     end
-    set -l command_args "kind create cluster && kubectl cluster-info && kubectl get nodes"
+    set -l command_args "kind create cluster --config /root/kind-cfg.yaml && kubectl cluster-info && kubectl get nodes"
+    log_cmd "ssh $SSH_USER@$ip $command_args"
+    ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
+end
+
+function project_task_post-flux
+    log_step "Post-flux task: Install Flux"
+
+    # Get VM IP with error checking
+    set -l ip (dom_ip)
+    if test -z "$ip"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$ip"
+        log_error "Could not get valid IP address for VM '$DOMAIN'."
+        return 1
+    end
+
+    set -l command_args "flux install --version $FLUX_VERSION && flux check"
+    log_cmd "ssh $SSH_USER@$ip $command_args"
+    ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
+end
+
+function project_task_fetch-kubecfg
+    set -l ip (dom_ip)
+    if test -z "$ip"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$ip"
+        log_error "Could not get valid IP address for VM '$DOMAIN'."
+        return 1
+    end
+    set -l command_args "kubectl config view --raw"
+    log_cmd "ssh $SSH_USER@$ip $command_args"
+    begin
+        set -l IFS
+        set kubeconf (ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args)
+    end
+    set replace ".clusters[0].cluster.server = \"https://$ip:6443\""
+    echo $kubeconf | yq e $replace - | tee ~/.kube/kind.config
+end
+function project_task_delete-cluster
+    set -l ip (dom_ip)
+    if test -z "$ip"; or not string match -qr '^\d+\.\d+\.\d+\.\d+$' "$ip"
+        log_error "Could not get valid IP address for VM '$DOMAIN'."
+        return 1
+    end
+    set -l command_args "kind delete cluster"
     log_cmd "ssh $SSH_USER@$ip $command_args"
     ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
 end
