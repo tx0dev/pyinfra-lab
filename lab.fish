@@ -430,7 +430,9 @@ else
                 log_cmd "virsh shutdown $DOMAIN"
                 virsh_cmd shutdown
             case "ssh"
-                log_step "Connecting to VM via SSH..."
+                if not test -n "$command_args"
+                    log_step "Connecting to VM via SSH..."
+                end
 
                 # First check if VM exists and is running
                 if not domain_exists
@@ -449,8 +451,9 @@ else
                     log_error "Could not get valid IP address for VM '$DOMAIN'."
                     return 1
                 end
-
-                log_cmd "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args"
+                if not test -n "$command_args"
+                    log_cmd "ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args"
+                end
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
         end
     # Handle project-related commands
