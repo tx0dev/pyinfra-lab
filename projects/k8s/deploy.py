@@ -18,10 +18,20 @@ networking:
 nodes:
 - role: control-plane
   extraPortMappings:
-  - containerPort: 6443
-    hostPort: 6443
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+  - containerPort: 80
+    hostPort: 80
     protocol: TCP
 - role: worker
+  extraPortMappings:
+  - containerPort: 443
+    hostPort: 8443
+    protocol: TCP
+  - containerPort: 80
+    hostPort: 8080
+    protocol: TCP
 """
 )
 

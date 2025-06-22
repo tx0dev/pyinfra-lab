@@ -502,10 +502,23 @@ else
             case "full"
                 # First reset the VM
                 if domain_exists
-                    log_step "Reverting to base snapshot..."
-                    log_cmd "virsh snapshot-revert $SNAPSHOT"
-                    virsh_cmd "snapshot-revert" $SNAPSHOT
-                    log_success "VM reverted to base snapshot"
+                    # Check if the snapshot exists before attempting revert
+                    log_step "Checking if snapshot $SNAPSHOT exists..."
+                    if virsh --connect $CONNECT snapshot-list --domain $DOMAIN --name 2>/dev/null | grep -q "$SNAPSHOT"
+                        log_step "Reverting to base snapshot..."
+                        log_cmd "virsh snapshot-revert $SNAPSHOT"
+                        virsh_cmd "snapshot-revert" $SNAPSHOT
+                        log_success "VM reverted to base snapshot"
+                    else
+                        log_info "Snapshot '$SNAPSHOT' doesn't exist."
+                        if not contains $DOMAIN $NO_REBUILD
+                            log_success "VM '$DOMAIN' can be rebuilt."
+                            log_step "Rebuilding VM..."
+                            cd $orig_dir
+                            ./lab.fish rebuild $project +wait
+                            cd $project_path
+                        end
+                    end
                 end
 
                 # Start the VM
@@ -526,6 +539,7 @@ else
                     sleep 0.5
                 end
                 log_success "VM is ready"
+                set -xg LAB_TARGET (dom_ip)
 
                 # Deploy
                 uv run pyinfra -y inventory.py deploy.py

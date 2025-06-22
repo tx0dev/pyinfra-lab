@@ -13,7 +13,7 @@ set FLUX_VERSION "2.0.0"           # Flux version
 
 # Custom project tasks
 function project_task_post-create
-    log_step "Post-create task: Setting up Kind and Flux"
+    log_step "Post-create task: Create KIND cluster"
     if not virsh_cmd domstate | grep -q running
         log_error "VM '$DOMAIN' is not running."
         return 1
@@ -40,7 +40,7 @@ function project_task_post-flux
         return 1
     end
 
-    set -l command_args "flux install --version $FLUX_VERSION && flux check"
+    set -l command_args "curl -s https://fluxcd.io/install.sh | bash"
     log_cmd "ssh $SSH_USER@$ip $command_args"
     ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
 end
@@ -69,4 +69,17 @@ function project_task_delete-cluster
     set -l command_args "kind delete cluster"
     log_cmd "ssh $SSH_USER@$ip $command_args"
     ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o ConnectTimeout=10 $SSH_USER@$ip $command_args
+end
+
+function project_task_local-bootstrap
+    set -xg KUBECONFIG ~/.kube/kind.config
+    pwd
+    flux bootstrap git --url=ssh://git.tx0.foo:23231/flux-lab.git --branch=main --private-key-file=../../secrets/flux-lab.key --path=clusters/kind
+    kubectl -n flux-system create secret docker-registry regcred \
+        --docker-username=flux \
+        --docker-password=sdgfralwwG15dsr7X0Dz --docker-server=registry.tx0.foo
+    cat ../../secrets/age.key |
+        kubectl create secret generic sops-age \
+          --namespace=flux-system \
+          --from-file=age.agekey=/dev/stdin
 end
